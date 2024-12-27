@@ -1,0 +1,2 @@
+Model,Learning Rate,Scheduler,Optimizer,Num Epochs,Test Loss,Precision,Recall,F1 Score,IoU
+UNet,0.0001,CosineAnnealingWarmRestarts,Adam,120,0.3849280148744583,0.7880010328580449,0.7529977446935104,0.7682407714357384,0.6251588299206773
