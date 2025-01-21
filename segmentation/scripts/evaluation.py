@@ -131,7 +131,7 @@ def evaluate_model(model, dataloader, loss_fn, device, class_rgb_values,
 
 def update_experiment_results_csv(
         csv_path, model_name, learning_rate, scheduler, optimizer,
-        num_epochs, test_loss, test_metrics
+        num_epochs, test_loss, test_metrics, building_metrics
 ):
     """
     Append experiment results to a CSV file. If the file doesn't exist, create it and add a header.
@@ -149,6 +149,13 @@ def update_experiment_results_csv(
             - "recall" (float): Recall value.
             - "f1_score" (float): F1-score value.
             - "iou" (float): Intersection over Union (IoU) value.
+        building_metrics (dict): Dictionary of building segmentation metrics containing:
+            - "total_target_buildings" (int): Total number of target buildings.
+            - "total_predicted_buildings" (int): Total number of predicted buildings.
+            - "total_successfully_identified_buildings" (int): Total successfully identified buildings.
+            - "average_iou_per_building" (float): Average IoU per building.
+            - "overall_success_rate" (float): Overall success rate (%).
+            - "overall_error_rate" (float): Overall error rate (%).
 
     Returns:
         None
@@ -159,7 +166,10 @@ def update_experiment_results_csv(
     # Define the header for the CSV file
     header = [
         "Model", "Learning Rate", "Scheduler", "Optimizer",
-        "Num Epochs", "Test Loss", "Precision", "Recall", "F1 Score", "IoU"
+        "Num Epochs", "Test Loss", "Precision", "Recall", "F1 Score", "IoU",
+        "Total Target Buildings", "Total Predicted Buildings",
+        "Total Successfully Identified Buildings", "Average IoU Per Building",
+        "Overall Success Building Rate (%)", "Overall Error Building Rate (%)"
     ]
 
     # Create a row with the experiment results
@@ -167,7 +177,13 @@ def update_experiment_results_csv(
         model_name, learning_rate, scheduler, optimizer,
         num_epochs, test_loss,
         test_metrics["precision"], test_metrics["recall"],
-        test_metrics["f1_score"], test_metrics["iou"]
+        test_metrics["f1_score"], test_metrics["iou"],
+        building_metrics["total_target_buildings"],
+        building_metrics["total_predicted_buildings"],
+        building_metrics["total_successful_buildings"],
+        building_metrics["average_iou_per_building"],
+        building_metrics["overall_success_rate"],
+        building_metrics["overall_error_rate"]
     ]
 
     # Open the CSV file in append mode and write the data

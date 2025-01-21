@@ -4,6 +4,7 @@ from torch.utils.data import Dataset, DataLoader
 from .utils import one_hot_encode, to_tensor
 from .transforms import get_train_transform, get_test_transform
 
+
 class BuildingsDataset(Dataset):
     """
     A PyTorch Dataset for loading images and their corresponding masks
@@ -22,16 +23,22 @@ class BuildingsDataset(Dataset):
         mask_paths (list): List of paths to the corresponding masks.
         class_rgb_values (list): The provided list of RGB values for classes.
         augmentation (callable): Augmentation function applied to samples.
+        num_crops (int, optional): Number of crops to generate per image. Defaults to 1.
     """
-    def __init__(self, images_dir, masks_dir, class_rgb_values=None, augmentation=None):
-        self.image_paths = [os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(images_dir))]
-        self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(masks_dir))]
+
+    def __init__(self, images_dir, masks_dir, class_rgb_values=None,
+                 augmentation=None, num_crops=1):
+        self.image_paths = [os.path.join(images_dir, image_id) for image_id in
+                            sorted(os.listdir(images_dir))]
+        self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in
+                           sorted(os.listdir(masks_dir))]
         self.class_rgb_values = class_rgb_values
         self.augmentation = augmentation
+        self.num_crops = num_crops
 
     def __len__(self):
         """Returns the number of samples in the dataset."""
-        return len(self.image_paths)
+        return len(self.image_paths) * self.num_crops
 
     def __getitem__(self, i):
         """
@@ -45,9 +52,14 @@ class BuildingsDataset(Dataset):
                 - torch.Tensor: The input image tensor.
                 - torch.Tensor: The corresponding mask tensor.
         """
+        # Map the flat index back to an image index
+        image_index = i // self.num_crops
+
         # Load and convert the image and mask
-        image = cv2.cvtColor(cv2.imread(self.image_paths[i]), cv2.COLOR_BGR2RGB)
-        mask = cv2.cvtColor(cv2.imread(self.mask_paths[i]), cv2.COLOR_BGR2RGB)
+        image = cv2.cvtColor(cv2.imread(self.image_paths[image_index]),
+                             cv2.COLOR_BGR2RGB)
+        mask = cv2.cvtColor(cv2.imread(self.mask_paths[image_index]),
+                            cv2.COLOR_BGR2RGB)
 
         # One-hot encode the mask using the provided RGB values
         mask = one_hot_encode(mask, self.class_rgb_values).astype('float')
@@ -61,8 +73,9 @@ class BuildingsDataset(Dataset):
         return to_tensor(image), to_tensor(mask)
 
 
-
-def get_dataloaders(x_train_dir, y_train_dir, x_valid_dir, y_valid_dir, x_test_dir, y_test_dir, class_rgb_values, batch_size=16):
+def get_dataloaders(x_train_dir, y_train_dir, x_valid_dir, y_valid_dir,
+                    x_test_dir, y_test_dir, class_rgb_values, batch_size=16,
+                    use_color_transforms=False, num_crops=1):
     """
     Create and return PyTorch dataloaders for training, validation, and testing datasets.
 
@@ -75,6 +88,8 @@ def get_dataloaders(x_train_dir, y_train_dir, x_valid_dir, y_valid_dir, x_test_d
         y_test_dir (str): Directory path containing corresponding test masks.
         class_rgb_values (list): List of RGB values representing the classes in the segmentation task.
         batch_size (int, optional): Batch size for the training dataloader. Defaults to 16.
+        use_color_transforms (bool, optional): If True, uses color transformations. Defaults to False.
+        num_crops (int, optional): Number of crops to generate per image. Defaults to 1.
 
     Returns:
         tuple: A tuple containing:
@@ -84,8 +99,9 @@ def get_dataloaders(x_train_dir, y_train_dir, x_valid_dir, y_valid_dir, x_test_d
     """
     train_dataset = BuildingsDataset(
         x_train_dir, y_train_dir,
-        augmentation=get_train_transform(),
-        class_rgb_values=class_rgb_values,
+        augmentation=get_train_transform(
+            use_color_transforms=use_color_transforms),
+        class_rgb_values=class_rgb_values, num_crops=num_crops
     )
 
     valid_dataset = BuildingsDataset(
@@ -100,7 +116,9 @@ def get_dataloaders(x_train_dir, y_train_dir, x_valid_dir, y_valid_dir, x_test_d
         class_rgb_values=class_rgb_values,
     )
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
-    valid_loader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=2)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size,
+                              shuffle=True, num_workers=2)
+    valid_loader = DataLoader(valid_dataset, batch_size=1, shuffle=False,
+                              num_workers=2)
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
     return train_loader, valid_loader, test_loader
