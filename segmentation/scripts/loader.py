@@ -10,8 +10,8 @@ class BuildingsDataset(Dataset):
     for semantic segmentation tasks.
 
     Args:
-        images_dir (str): Path to the directory containing input images.
-        masks_dir (str): Path to the directory containing corresponding masks.
+        images_dirs (Union[str, List[str]]): Path or list of paths to directories containing input images.
+        masks_dirs (Union[str, List[str]]): Path or list of paths to directories containing corresponding masks.
         class_rgb_values (list, optional): A list of RGB values representing
             the classes in the segmentation task. Defaults to None.
         augmentation (callable, optional): A function or object for applying
@@ -25,12 +25,29 @@ class BuildingsDataset(Dataset):
         num_crops (int, optional): Number of crops to generate per image. Defaults to 1.
     """
 
-    def __init__(self, images_dir, masks_dir, class_rgb_values=None,
+    def __init__(self, images_dirs, masks_dirs, class_rgb_values=None,
                  augmentation=None, num_crops=1):
-        self.image_paths = [os.path.join(images_dir, image_id) for image_id in
-                            sorted(os.listdir(images_dir))]
-        self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in
-                           sorted(os.listdir(masks_dir))]
+        if isinstance(images_dirs, str):
+            images_dirs = [images_dirs]
+        if isinstance(masks_dirs, str):
+            masks_dirs = [masks_dirs]
+
+        self.image_paths = []
+        self.mask_paths = []
+        for images_dir, masks_dir in zip(images_dirs, masks_dirs):
+            image_files = sorted(os.listdir(images_dir))
+            mask_files = sorted(os.listdir(masks_dir))
+
+            # Strip extensions to get base names
+            image_basenames = {os.path.splitext(f)[0]: f for f in image_files}
+            mask_basenames = {os.path.splitext(f)[0]: f for f in mask_files}
+
+            # Match files that exist in both
+            common_keys = sorted(set(image_basenames.keys()) & set(mask_basenames.keys()))
+
+            for key in common_keys:
+                self.image_paths.append(os.path.join(images_dir, image_basenames[key]))
+                self.mask_paths.append(os.path.join(masks_dir, mask_basenames[key]))
         self.class_rgb_values = class_rgb_values
         self.augmentation = augmentation
         self.num_crops = num_crops
@@ -131,26 +148,44 @@ class ExhaustiveCropsDataset(Dataset):
     A PyTorch Dataset for generating non-overlapping crops from images and their corresponding masks.
 
     Args:
-        images_dir (str): Path to the directory containing input images.
-        masks_dir (str): Path to the directory containing corresponding masks.
+        images_dirs (Union[str, List[str]]): Path or list of paths to directories containing input images.
+        masks_dirs (Union[str, List[str]]): Path or list of paths to directories containing corresponding masks.
         class_rgb_values (list): A list of RGB values representing the classes in the segmentation task.
-        crop_size (tuple): The size (height, width) of each crop.
-        augmentation (callable, optional): A function/transform to apply to the image.
+        crop_size (tuple): The size (height, width) of each crop. Defaults to (256, 256).
+        augmentation (callable, optional): A function/transform to apply to the image and mask.
     """
-
-    def __init__(self, images_dir, masks_dir, class_rgb_values,
+    def __init__(self, images_dirs, masks_dirs, class_rgb_values,
                  crop_size=(256, 256), augmentation=None):
-        self.image_paths = [os.path.join(images_dir, image_id) for image_id in
-                            sorted(os.listdir(images_dir))]
-        self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in
-                           sorted(os.listdir(masks_dir))]
-        self.class_rgb_values = class_rgb_values
+        # Convert to list if not already
+        if isinstance(images_dirs, str):
+            images_dirs = [images_dirs]
+        if isinstance(masks_dirs, str):
+            masks_dirs = [masks_dirs]
+
+        self.image_paths = []
+        self.mask_paths = []
+
+        for images_dir, masks_dir in zip(images_dirs, masks_dirs):
+            image_files = sorted(os.listdir(images_dir))
+            mask_files = sorted(os.listdir(masks_dir))
+
+            # Strip extensions to get base names
+            image_basenames = {os.path.splitext(f)[0]: f for f in image_files}
+            mask_basenames = {os.path.splitext(f)[0]: f for f in mask_files}
+
+            # Match files that exist in both
+            common_keys = sorted(set(image_basenames.keys()) & set(mask_basenames.keys()))
+
+            for key in common_keys:
+                self.image_paths.append(os.path.join(images_dir, image_basenames[key]))
+                self.mask_paths.append(os.path.join(masks_dir, mask_basenames[key]))
+                self.class_rgb_values = class_rgb_values
+
         self.crop_size = crop_size
         self.augmentation = augmentation
         self.crop_positions = []
 
         self._calculate_crops()
-
     def _calculate_crops(self):
         """Precompute crop positions for all images."""
         for i, image_path in enumerate(self.image_paths):
@@ -186,6 +221,7 @@ class ExhaustiveCropsDataset(Dataset):
         """
         # Get the image path and crop position
         image_path, mask_path, y_start, x_start = self.crop_positions[idx]
+
 
         # Load the image and mask
         image = cv2.cvtColor(cv2.imread(image_path),

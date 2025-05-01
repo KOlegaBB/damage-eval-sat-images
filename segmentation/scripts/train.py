@@ -4,7 +4,7 @@ from tqdm import tqdm
 import numpy as np
 from .evaluation import calculate_metrics
 
-def train_model(model, train_loader, valid_loader, loss_fn, optimizer, lr_scheduler, epochs=12, device="cuda", exp_num=1):
+def train_model(model, train_loader, valid_loader, loss_fn, optimizer, lr_scheduler=None, epochs=12, device="cuda", exp_num=1):
     """
     Trains a model for a specified number of epochs and evaluates it on a validation set.
     This function also logs various metrics such as loss, precision, recall, F1 score, and IoU to TensorBoard.
@@ -15,7 +15,7 @@ def train_model(model, train_loader, valid_loader, loss_fn, optimizer, lr_schedu
         valid_loader (torch.utils.data.DataLoader): DataLoader for the validation dataset.
         loss_fn (torch.nn.Module): The loss function to compute the loss during training and validation.
         optimizer (torch.optim.Optimizer): The optimizer to update the model's weights.
-        lr_scheduler (torch.optim.lr_scheduler): Learning rate scheduler to adjust the learning rate during training.
+        lr_scheduler (torch.optim.lr_scheduler, optional): Learning rate scheduler to adjust the learning rate during training.
         epochs (int, optional): The number of epochs to train the model. Default is 12.
         device (str, optional): The device to run the training on ('cuda' or 'cpu'). Default is 'cuda'.
         exp_num (int, optional): The experiment number used to organize TensorBoard logs. Default is 1.
@@ -114,7 +114,8 @@ def train_model(model, train_loader, valid_loader, loss_fn, optimizer, lr_schedu
         print(f"  Train Loss: {train_loss:.4f}, Precision: {train_precision:.4f}, Recall: {train_recall:.4f}, F1: {train_f1:.4f}, IoU: {train_iou:.4f}")
         print(f"  Val Loss: {val_loss:.4f}, Precision: {val_precision:.4f}, Recall: {val_recall:.4f}, F1: {val_f1:.4f}, IoU: {val_iou:.4f}")
 
-        lr_scheduler.step()
+        if lr_scheduler:
+            lr_scheduler.step()
 
     # Close TensorBoard writer
     writer.close()
