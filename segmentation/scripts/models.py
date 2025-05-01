@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+
 ### UNet ###
 class DoubleConv(nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -17,6 +18,7 @@ class DoubleConv(nn.Module):
     def forward(self, x):
         return self.double_conv(x)
 
+
 class DownBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(DownBlock, self).__init__()
@@ -28,21 +30,27 @@ class DownBlock(nn.Module):
         down_out = self.down_sample(skip_out)
         return (down_out, skip_out)
 
+
 class UpBlock(nn.Module):
     def __init__(self, in_channels, out_channels, up_sample_mode):
         super(UpBlock, self).__init__()
         if up_sample_mode == 'conv_transpose':
-            self.up_sample = nn.ConvTranspose2d(in_channels - out_channels, in_channels - out_channels, kernel_size=2, stride=2)
+            self.up_sample = nn.ConvTranspose2d(in_channels - out_channels,
+                                                in_channels - out_channels,
+                                                kernel_size=2, stride=2)
         elif up_sample_mode == 'bilinear':
-            self.up_sample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+            self.up_sample = nn.Upsample(scale_factor=2, mode='bilinear',
+                                         align_corners=True)
         else:
-            raise ValueError("Unsupported `up_sample_mode` (can take one of `conv_transpose` or `bilinear`)")
+            raise ValueError(
+                "Unsupported `up_sample_mode` (can take one of `conv_transpose` or `bilinear`)")
         self.double_conv = DoubleConv(in_channels, out_channels)
 
     def forward(self, down_input, skip_input):
         x = self.up_sample(down_input)
         x = torch.cat([x, skip_input], dim=1)
         return self.double_conv(x)
+
 
 class UNet(nn.Module):
     def __init__(self, out_classes=2, up_sample_mode='conv_transpose'):
@@ -74,6 +82,33 @@ class UNet(nn.Module):
 
 
 ### UNet++ ###
+# The UNet++ architecture is implemented based on the work by Takato Kimura,
+# available in the following GitHub repository:
+# https://github.com/4uiiurz1/pytorch-nested-unet
+#
+# The code is licensed under the MIT License:
+#
+# MIT License
+#
+# Copyright (c) 2018 Takato Kimura
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
 
 class VGGBlock(nn.Module):
     def __init__(self, in_channels, middle_channels, out_channels):
@@ -97,7 +132,8 @@ class VGGBlock(nn.Module):
 
 
 class NestedUNet(nn.Module):
-    def __init__(self, num_classes, input_channels=3, deep_supervision=False, **kwargs):
+    def __init__(self, num_classes, input_channels=3, deep_supervision=False,
+                 **kwargs):
         super().__init__()
 
         nb_filter = [32, 64, 128, 256, 512]
@@ -105,7 +141,8 @@ class NestedUNet(nn.Module):
         self.deep_supervision = deep_supervision
 
         self.pool = nn.MaxPool2d(2, 2)
-        self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+        self.up = nn.Upsample(scale_factor=2, mode='bilinear',
+                              align_corners=True)
 
         self.conv0_0 = VGGBlock(input_channels, nb_filter[0], nb_filter[0])
         self.conv1_0 = VGGBlock(nb_filter[0], nb_filter[1], nb_filter[1])
@@ -113,19 +150,29 @@ class NestedUNet(nn.Module):
         self.conv3_0 = VGGBlock(nb_filter[2], nb_filter[3], nb_filter[3])
         self.conv4_0 = VGGBlock(nb_filter[3], nb_filter[4], nb_filter[4])
 
-        self.conv0_1 = VGGBlock(nb_filter[0]+nb_filter[1], nb_filter[0], nb_filter[0])
-        self.conv1_1 = VGGBlock(nb_filter[1]+nb_filter[2], nb_filter[1], nb_filter[1])
-        self.conv2_1 = VGGBlock(nb_filter[2]+nb_filter[3], nb_filter[2], nb_filter[2])
-        self.conv3_1 = VGGBlock(nb_filter[3]+nb_filter[4], nb_filter[3], nb_filter[3])
+        self.conv0_1 = VGGBlock(nb_filter[0] + nb_filter[1], nb_filter[0],
+                                nb_filter[0])
+        self.conv1_1 = VGGBlock(nb_filter[1] + nb_filter[2], nb_filter[1],
+                                nb_filter[1])
+        self.conv2_1 = VGGBlock(nb_filter[2] + nb_filter[3], nb_filter[2],
+                                nb_filter[2])
+        self.conv3_1 = VGGBlock(nb_filter[3] + nb_filter[4], nb_filter[3],
+                                nb_filter[3])
 
-        self.conv0_2 = VGGBlock(nb_filter[0]*2+nb_filter[1], nb_filter[0], nb_filter[0])
-        self.conv1_2 = VGGBlock(nb_filter[1]*2+nb_filter[2], nb_filter[1], nb_filter[1])
-        self.conv2_2 = VGGBlock(nb_filter[2]*2+nb_filter[3], nb_filter[2], nb_filter[2])
+        self.conv0_2 = VGGBlock(nb_filter[0] * 2 + nb_filter[1], nb_filter[0],
+                                nb_filter[0])
+        self.conv1_2 = VGGBlock(nb_filter[1] * 2 + nb_filter[2], nb_filter[1],
+                                nb_filter[1])
+        self.conv2_2 = VGGBlock(nb_filter[2] * 2 + nb_filter[3], nb_filter[2],
+                                nb_filter[2])
 
-        self.conv0_3 = VGGBlock(nb_filter[0]*3+nb_filter[1], nb_filter[0], nb_filter[0])
-        self.conv1_3 = VGGBlock(nb_filter[1]*3+nb_filter[2], nb_filter[1], nb_filter[1])
+        self.conv0_3 = VGGBlock(nb_filter[0] * 3 + nb_filter[1], nb_filter[0],
+                                nb_filter[0])
+        self.conv1_3 = VGGBlock(nb_filter[1] * 3 + nb_filter[2], nb_filter[1],
+                                nb_filter[1])
 
-        self.conv0_4 = VGGBlock(nb_filter[0]*4+nb_filter[1], nb_filter[0], nb_filter[0])
+        self.conv0_4 = VGGBlock(nb_filter[0] * 4 + nb_filter[1], nb_filter[0],
+                                nb_filter[0])
 
         if self.deep_supervision:
             self.final1 = nn.Conv2d(nb_filter[0], num_classes, kernel_size=1)
@@ -134,7 +181,6 @@ class NestedUNet(nn.Module):
             self.final4 = nn.Conv2d(nb_filter[0], num_classes, kernel_size=1)
         else:
             self.final = nn.Conv2d(nb_filter[0], num_classes, kernel_size=1)
-
 
     def forward(self, input):
         x0_0 = self.conv0_0(input)
@@ -154,7 +200,8 @@ class NestedUNet(nn.Module):
         x3_1 = self.conv3_1(torch.cat([x3_0, self.up(x4_0)], 1))
         x2_2 = self.conv2_2(torch.cat([x2_0, x2_1, self.up(x3_1)], 1))
         x1_3 = self.conv1_3(torch.cat([x1_0, x1_1, x1_2, self.up(x2_2)], 1))
-        x0_4 = self.conv0_4(torch.cat([x0_0, x0_1, x0_2, x0_3, self.up(x1_3)], 1))
+        x0_4 = self.conv0_4(
+            torch.cat([x0_0, x0_1, x0_2, x0_3, self.up(x1_3)], 1))
 
         if self.deep_supervision:
             output1 = self.final1(x0_1)
@@ -168,7 +215,15 @@ class NestedUNet(nn.Module):
             return output
 
 
-### U2Net ###
+### U^2Net ###
+# The architecture for U^2-Net was sourced from the following paper and repository:
+#
+# Paper: Qin, Xuebin, et al. "U2-Net: Going Deeper with Nested U-Structure for Salient Object Detection."
+#        Pattern Recognition, vol. 106, 2020, pp. 107404. DOI: https://doi.org/10.1016/j.patcog.2020.107404
+# Repository: https://github.com/xuebinqin/U-2-Net
+#
+# The model is licensed under the Apache License 2.0:
+# http://www.apache.org/licenses/LICENSE-2.0
 
 class Down(nn.Module):
     """Downscaling with maxpool then double conv"""
@@ -192,10 +247,12 @@ class Up(nn.Module):
 
         # if bilinear, use the normal convolutions to reduce the number of channels
         if bilinear:
-            self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+            self.up = nn.Upsample(scale_factor=2, mode='bilinear',
+                                  align_corners=True)
             self.conv = DoubleConv(in_channels, out_channels, in_channels // 2)
         else:
-            self.up = nn.ConvTranspose2d(in_channels, in_channels // 2, kernel_size=2, stride=2)
+            self.up = nn.ConvTranspose2d(in_channels, in_channels // 2,
+                                         kernel_size=2, stride=2)
             self.conv = DoubleConv(in_channels, out_channels)
 
     def forward(self, x1, x2):
@@ -221,6 +278,7 @@ class OutConv(nn.Module):
     def forward(self, x):
         return self.conv(x)
 
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -237,7 +295,6 @@ class REBNCONV(nn.Module):
         self.relu_s1 = nn.ReLU(inplace=True)
 
     def forward(self, x):
-
         hx = x
         xout = self.relu_s1(self.bn_s1(self.conv_s1(hx)))
 
@@ -246,7 +303,6 @@ class REBNCONV(nn.Module):
 
 ## upsample tensor 'src' to have the same spatial size with tensor 'tar'
 def _upsample_like(src, tar):
-
     src = F.upsample(src, size=tar.shape[2:], mode="bilinear")
 
     return src
@@ -286,7 +342,6 @@ class RSU7(nn.Module):  # UNet07DRES(nn.Module):
         self.rebnconv1d = REBNCONV(mid_ch * 2, out_ch, dirate=1)
 
     def forward(self, x):
-
         hx = x
         hxin = self.rebnconvin(hx)
 
@@ -365,7 +420,6 @@ class RSU6(nn.Module):  # UNet06DRES(nn.Module):
         self.rebnconv1d = REBNCONV(mid_ch * 2, out_ch, dirate=1)
 
     def forward(self, x):
-
         hx = x
 
         hxin = self.rebnconvin(hx)
@@ -435,7 +489,6 @@ class RSU5(nn.Module):  # UNet05DRES(nn.Module):
         self.rebnconv1d = REBNCONV(mid_ch * 2, out_ch, dirate=1)
 
     def forward(self, x):
-
         hx = x
 
         hxin = self.rebnconvin(hx)
@@ -495,7 +548,6 @@ class RSU4(nn.Module):  # UNet04DRES(nn.Module):
         self.rebnconv1d = REBNCONV(mid_ch * 2, out_ch, dirate=1)
 
     def forward(self, x):
-
         hx = x
 
         hxin = self.rebnconvin(hx)
@@ -545,7 +597,6 @@ class RSU4F(nn.Module):  # UNet04FRES(nn.Module):
         self.rebnconv1d = REBNCONV(mid_ch * 2, out_ch, dirate=1)
 
     def forward(self, x):
-
         hx = x
 
         hxin = self.rebnconvin(hx)
@@ -607,7 +658,6 @@ class U2NET(nn.Module):
         self.outconv = nn.Conv2d(6 * out_ch, out_ch, 1)
 
     def forward(self, x):
-
         hx = x
 
         # stage 1
@@ -717,7 +767,6 @@ class U2NETP(nn.Module):
         self.outconv = nn.Conv2d(6 * out_ch, out_ch, 1)
 
     def forward(self, x):
-
         hx = x
 
         # stage 1
