@@ -34,6 +34,7 @@ damage-eval-sat-images/
 │   ├── building_segmentation.ipynb      # Segmentation experiment notebook
 │   └── building_segmentation_finetuning.ipynb  # Segmentation fine-tuning on Ukrainian dataset
 │
+├── datasheet.md                         # Ukrainian Infrustructure dataset description
 └── README.md                            # Project description (this file)
 ```
 
