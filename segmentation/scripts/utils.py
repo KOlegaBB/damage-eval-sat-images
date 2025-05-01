@@ -139,28 +139,41 @@ def visualize_train_samples(dataloader, class_rgb_values, num_samples=5):
     plt.show()
 
 
-def visualize_test_predictions(predictions):
+def visualize_predictions(predictions, num_images=10):
     """
-    Visualizes the test predictions by displaying the input image, expected mask, and predicted mask.
+    Visualizes predictions by displaying the input image, true mask, predicted mask,
+    and optionally the regularized predicted mask.
 
     Args:
-        predictions (list of tuples): List containing tuples of (image, expected_mask, predicted_mask).
+        predictions (list of tuples): Each tuple should be of the form:
+            (image, true_mask, pred_mask) or
+            (image, true_mask, pred_mask, reg_pred_mask)
+        num_images (int, optional): Number of predictions to visualize. Defaults to all.
     """
-    num_samples = len(predictions)
-    fig, axs = plt.subplots(num_samples, 3, figsize=(12, 4 * num_samples))
-    for i in range(num_samples):
-        image, expected_mask, predicted_mask = predictions[i]
+    num_images = num_images or len(predictions)
+    for i in range(min(num_images, len(predictions))):
+        sample = predictions[i]
+        has_regularization = len(sample) == 4
 
-        axs[i, 0].imshow(image)
-        axs[i, 0].set_title("Input Image")
-        axs[i, 0].axis("off")
+        fig, axes = plt.subplots(1, 4 if has_regularization else 3, figsize=(16, 6))
 
-        axs[i, 1].imshow(expected_mask)
-        axs[i, 1].set_title("Expected Mask")
-        axs[i, 1].axis("off")
+        axes[0].imshow(sample[0])
+        axes[0].set_title("Input Image")
+        axes[0].axis("off")
 
-        axs[i, 2].imshow(predicted_mask)
-        axs[i, 2].set_title("Predicted Mask")
-        axs[i, 2].axis("off")
+        axes[1].imshow(sample[1])
+        axes[1].set_title("True Mask")
+        axes[1].axis("off")
 
-    plt.show()
+        axes[2].imshow(sample[2])
+        axes[2].set_title("Predicted Mask")
+        axes[2].axis("off")
+
+        if has_regularization:
+            axes[3].imshow(sample[3])
+            axes[3].set_title("Pred Mask (After Reg.)")
+            axes[3].axis("off")
+
+        plt.tight_layout()
+        plt.show()
+

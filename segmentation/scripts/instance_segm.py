@@ -1,7 +1,22 @@
 from tqdm import tqdm
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
+
+
+def iou(true_mask, pred_mask):
+    """
+    Calculate Intersection over Union (IoU) between two binary masks.
+
+    Args:
+        true_mask (numpy.ndarray): True binary mask.
+        pred_mask (numpy.ndarray): Predicted binary mask.
+
+    Returns:
+        float: IoU value between 0 and 1.
+    """
+    intersection = np.logical_and(true_mask, pred_mask)
+    union = np.logical_or(true_mask, pred_mask)
+    return np.sum(intersection) / np.sum(union) if np.sum(union) != 0 else 0.0
 
 
 def semantic_to_instance_mask(mask_rgb, target_rgb=(255, 255, 255)):
@@ -32,111 +47,6 @@ def semantic_to_instance_mask(mask_rgb, target_rgb=(255, 255, 255)):
                          thickness=cv2.FILLED)
 
     return instance_mask, contours
-
-
-def visualize_instance_mask(instance_mask):
-    """
-    Visualize the instance segmentation mask
-
-    Args:
-        instance_mask (numpy.ndarray): Instance segmentation mask (H, W) with unique labels.
-    """
-    # Generate a color map for all possible labels
-    unique_ids = np.unique(instance_mask)
-    color_map = np.zeros((unique_ids.max() + 1, 3), dtype=np.uint8)
-    for i in unique_ids:
-        if i == 0:  # Background
-            color_map[i] = [0, 0, 0]
-        else:
-            color_map[i] = np.random.randint(0, 255, size=3)
-
-    # Apply the color map to the instance mask
-    instance_rgb = color_map[instance_mask]
-
-    return instance_rgb
-
-
-def process_predictions_to_instance_masks(predictions,
-                                          target_rgb=(255, 255, 255)):
-    """
-    Process predictions to generate instance segmentation masks for all images.
-
-    Args:
-        predictions (list): List of predictions, where each element contains
-                            [initial_image, true_mask, predicted_mask].
-        target_rgb (tuple): RGB color value representing the class to segment (default is (255, 255, 255)).
-
-    Returns:
-        results (list): List of dictionaries with keys 'image', 'true_instance_mask', and 'predicted_instance_mask'.
-    """
-    results = []
-    for prediction in predictions:
-        initial_image = prediction[0]
-        true_mask, _ = semantic_to_instance_mask(prediction[1],
-                                                 target_rgb=target_rgb)
-        predicted_mask, _ = semantic_to_instance_mask(prediction[2],
-                                                      target_rgb=target_rgb)
-
-        results.append({
-            "image": initial_image,
-            "true_instance_mask": true_mask,
-            "predicted_instance_mask": predicted_mask,
-        })
-
-    return results
-
-
-def visualize_instance_results(results):
-    """
-    Visualize all results with initial image, true instance mask, and predicted instance mask.
-
-    Args:
-        results (list): List of dictionaries with keys 'image', 'true_instance_mask', and 'predicted_instance_mask'.
-    """
-    for result in results:
-        image = result["image"]
-        true_mask_rgb = visualize_instance_mask(result["true_instance_mask"])
-        predicted_mask_rgb = visualize_instance_mask(
-            result["predicted_instance_mask"])
-
-        # Plot the results
-        plt.figure(figsize=(15, 5))
-
-        # Initial image
-        plt.subplot(1, 3, 1)
-        plt.title("Initial Image")
-        plt.imshow(image)
-        plt.axis("off")
-
-        # True instance mask
-        plt.subplot(1, 3, 2)
-        plt.title("True Instance Mask")
-        plt.imshow(true_mask_rgb)
-        plt.axis("off")
-
-        # Predicted instance mask
-        plt.subplot(1, 3, 3)
-        plt.title("Predicted Instance Mask")
-        plt.imshow(predicted_mask_rgb)
-        plt.axis("off")
-
-        plt.show()
-
-
-def iou(true_mask, pred_mask):
-    """
-    Calculate Intersection over Union (IoU) between two binary masks.
-
-    Args:
-        true_mask (numpy.ndarray): True binary mask.
-        pred_mask (numpy.ndarray): Predicted binary mask.
-
-    Returns:
-        float: IoU value between 0 and 1.
-    """
-    intersection = np.logical_and(true_mask, pred_mask)
-    union = np.logical_or(true_mask, pred_mask)
-    return np.sum(intersection) / np.sum(union) if np.sum(union) != 0 else 0.0
 
 
 def get_contour_bounding_boxes(contours):
@@ -182,100 +92,90 @@ def filter_contours_by_bbox(true_contours, pred_contours, true_bboxes,
     return filtered_pairs
 
 
-def evaluate_instance_masks(predictions, target_rgb=(255, 255, 255),
-                            iou_threshold=0.5):
+def instance_post_processing_statistics(true_mask_rgb, pred_mask_rgb,
+                                      target_rgb=(255, 255, 255),
+                                      iou_threshold=0.5):
     """
-    Process predictions to generate instance segmentation masks and calculate metrics for all images.
+    Compute instance-level evaluation statistics for building segmentation masks.
 
-    Args:
-        predictions (list): List of predictions, where each element contains
-                            [initial_image, true_mask, predicted_mask].
-        target_rgb (tuple): RGB color value representing the class to segment.
-        iou_threshold (float): IoU threshold to consider a building successfully identified.
+    This function evaluates the performance of an instance segmentation prediction by:
+    1. Extracting building instances from both ground truth and predicted RGB masks.
+    2. Matching predicted and ground truth instances using bounding box filtering.
+    3. Calculating the Intersection-over-Union (IoU) for matched instances.
+    4. Reporting statistics such as total targets, predictions, successful detections,
+      mean IoU, and per-instance IoUs.
+
+    Parameters:
+       true_mask_rgb (np.ndarray): Ground truth semantic segmentation mask in RGB format.
+       pred_mask_rgb (np.ndarray): Predicted semantic segmentation mask in RGB format.
+       target_rgb (tuple): RGB value representing the target class (default is white `(255, 255, 255)`).
+       iou_threshold (float): IoU threshold for considering a predicted instance as a successful match (default: 0.5).
 
     Returns:
-        metrics (dict): Aggregated metrics for all images.
-        results (list): Detailed results per image with errors per building.
+       dict: A dictionary with the following metrics:
+           - 'total_target_buildings' (int): Number of building instances in the ground truth.
+           - 'total_predicted_buildings' (int): Number of building instances in the prediction.
+           - 'total_successful_buildings' (int): Number of predicted buildings matched successfully with ground truth (IoU ≥ threshold).
+           - 'mean_iou' (float): Average IoU across all matched building instances.
+           - 'iou_per_building' (List[float]): List of maximum IoU values for each predicted building instance.
     """
-    total_target_buildings = 0
-    total_predicted_buildings = 0
-    total_successful_buildings = 0
-    total_iou_sum = 0
-    total_iou_count = 0
+    # Step 1: Convert semantic masks to instance masks and get contours
+    true_mask, true_contours = semantic_to_instance_mask(true_mask_rgb,
+                                                         target_rgb=target_rgb)
+    pred_mask, pred_contours = semantic_to_instance_mask(pred_mask_rgb,
+                                                         target_rgb=target_rgb)
 
-    results = []
-    for prediction in tqdm(predictions):
-        initial_image = prediction[0]
-        true_mask, true_contours = semantic_to_instance_mask(prediction[1],
-                                                             target_rgb=target_rgb)
-        predicted_mask, pred_contours = semantic_to_instance_mask(
-            prediction[2], target_rgb=target_rgb)
+    # Step 2: Get bounding boxes for contours
+    true_bboxes = get_contour_bounding_boxes(true_contours)
+    pred_bboxes = get_contour_bounding_boxes(pred_contours)
 
-        # Get bounding boxes for filtering
-        true_bboxes = get_contour_bounding_boxes(true_contours)
-        pred_bboxes = get_contour_bounding_boxes(pred_contours)
+    # Step 3: Count true and predicted buildings
+    target_buildings_true = len(true_contours)
+    predicted_buildings_pred = len(pred_contours)
 
-        # Filter contours using bounding box intersection
-        filtered_pairs = filter_contours_by_bbox(true_contours, pred_contours,
-                                                 true_bboxes, pred_bboxes)
+    # Initialize variables to track metrics
+    successful_buildings_pred = 0
+    iou_per_building_pred = []
 
-        # Metrics initialization
-        target_buildings = len(true_contours)
-        predicted_buildings = len(pred_contours)
-        successful_buildings = 0
-        iou_per_building = []
+    # Step 4: Calculate IoU for filtered pairs of true and predicted buildings
+    filtered_pairs_true_pred = filter_contours_by_bbox(true_contours,
+                                                       pred_contours,
+                                                       true_bboxes,
+                                                       pred_bboxes)
+    for filtered_buildings in filtered_pairs_true_pred:
+        ious = []
+        for true_contour, pred_contour in filtered_buildings:
+            # Create masks for the filtered contours
+            true_building_mask = np.zeros_like(true_mask, dtype=np.uint8)
+            pred_building_mask = np.zeros_like(pred_mask, dtype=np.uint8)
 
-        for filtered_buildings in filtered_pairs:
-            ious = []
-            for true_contour, pred_contour in filtered_buildings:
-                # Create masks for the filtered contours
-                true_building_mask = np.zeros_like(true_mask, dtype=np.uint8)
-                pred_building_mask = np.zeros_like(predicted_mask,
-                                                   dtype=np.uint8)
+            cv2.drawContours(true_building_mask, [true_contour], -1, 255,
+                             thickness=cv2.FILLED)
+            cv2.drawContours(pred_building_mask, [pred_contour], -1, 255,
+                             thickness=cv2.FILLED)
 
-                cv2.drawContours(true_building_mask, [true_contour], -1, 255,
-                                 thickness=cv2.FILLED)
-                cv2.drawContours(pred_building_mask, [pred_contour], -1, 255,
-                                 thickness=cv2.FILLED)
+            # Calculate IoU
+            iou_value = iou(true_building_mask, pred_building_mask)
+            ious.append(iou_value)
 
-                # Calculate IoU
-                iou_value = iou(true_building_mask, pred_building_mask)
-                ious.append(iou_value)
+        if ious:
+            max_iou = max(ious)
+            iou_per_building_pred.append(max_iou)
+            if max_iou >= iou_threshold:
+                successful_buildings_pred += 1
 
-            if ious:
-                max_iou = max(ious)
-                iou_per_building.append(max_iou)
-                if max_iou >= iou_threshold:
-                    successful_buildings += 1
+    # Step 5: Aggregate metrics
+    total_target_buildings_before = target_buildings_true
+    total_predicted_buildings_before = predicted_buildings_pred
+    total_successful_buildings_before = successful_buildings_pred
+    total_iou_sum_before = sum(iou_per_building_pred)
+    total_iou_count_before = len(iou_per_building_pred)
 
-        # Aggregate metrics
-        total_target_buildings += target_buildings
-        total_predicted_buildings += predicted_buildings
-        total_successful_buildings += successful_buildings
-        total_iou_sum += sum(iou_per_building)
-        total_iou_count += len(iou_per_building)
-
-        # Append results for this image
-        results.append({
-            "image": initial_image,
-            "true_instance_mask": true_mask,
-            "predicted_instance_mask": predicted_mask,
-            "errors_per_building": iou_per_building,
-            "successful_buildings": successful_buildings,
-            "total_target_buildings": target_buildings,
-            "total_predicted_buildings": predicted_buildings,
-        })
-
-    # Compute overall metrics
-    average_iou_per_building = total_iou_sum / total_iou_count if total_iou_count > 0 else 0
-    metrics = {
-        "total_target_buildings": total_target_buildings,
-        "total_predicted_buildings": total_predicted_buildings,
-        "total_successful_buildings": total_successful_buildings,
-        "average_iou_per_building": average_iou_per_building,
-        "overall_success_rate": total_successful_buildings / total_target_buildings if total_target_buildings > 0 else 0,
-        "overall_error_rate": (
-                                          total_predicted_buildings - total_successful_buildings) / total_predicted_buildings if total_predicted_buildings > 0 else 0,
+    # Returning metrics
+    return {
+        'total_target_buildings': total_target_buildings_before,
+        'total_predicted_buildings': total_predicted_buildings_before,
+        'total_successful_buildings': total_successful_buildings_before,
+        'mean_iou': total_iou_sum_before / total_iou_count_before if total_iou_count_before > 0 else 0,
+        'iou_per_building': iou_per_building_pred
     }
-
-    return metrics, results
